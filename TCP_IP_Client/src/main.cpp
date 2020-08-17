@@ -34,7 +34,13 @@ static uint8_t public_key_server[RSA_SIZE] = {
 // 0x56, 0x29, 0x30, 0xE2, 0x73, 0xD7, 0x6D, 0x57, 0x33, 0xA6, 0xAD, 0x4A, 0xD9, 0xD3, 0xF7, 0xA5,
 // 0x98, 0xF3, 0xFA, 0x07, 0x64, 0x7D, 0xE5, 0xE4, 0x4B, 0x13, 0x5C, 0x90, 0x38, 0xF4, 0x3B, 0x59 };
 
-//static AES128 aes;
+struct conction_flow{
+  bool auth_pass = false;
+  bool aes_pass = false;
+};
+
+static conction_flow status;
+
 enum client_mes_type
 {
     AUTH = 1,
@@ -148,17 +154,6 @@ static uint8_t tx_counter = 0U;
 static char tx_buffer[BUFFER_SIZE] = {};
 client_mes_type operation_type = client_mes_type(AUTH);
 const uint8_t *key;
-
-/*void generate_key(void)
-{
-    memset(aes_key, 0, LENGTH);
-    for (uint8_t i = 0; i < LENGTH; i++)
-    {
-        aes_key[i] = random(255);
-    }
-
-    aes.setKey(aes_key, LENGTH);
-}*/
 
 static res_info response_details;
 static res_info response_parsing(uint8_t *message)
@@ -373,20 +368,34 @@ void loop()
     Serial.println();
     Serial.println(operation_type);
 
-    if (operation_type == client_mes_type(AUTH))
+    if (status.aes_pass == false) 
     {
 
-        //operation_type = mes_type(AES_KEY);
-        //delay(2000);
+        uint8_t auth_hash[HASH_SIZE] = {};
+        sha1(auth_key,RSA_BLOCK_SIZE,auth_hash);
+        Serial.print("First hash is: ");
+        print_data((uint8_t *)auth_hash, HASH_SIZE);
+        
+        uint8_t rsa_hash_auth [RSA_SIZE]= {};
+        rsa_private_encrypt(auth_hash,HASH_SIZE, client_public_key, client_private_key, rsa_hash_auth);
+        for (tx_counter = 0 ; tx_counter < RSA_SIZE ; tx_counter ++)
+        {
+            tx_buffer[tx_counter] = rsa_hash_auth[tx_counter];
+        }
 
-        tx_counter = build_message(client_mes_type(AUTH), auth_key, RSA_BLOCK_SIZE, tx_buffer);
+        uint8_t auth_hash_hash[HASH_SIZE] = {};
+        sha1(rsa_hash_auth,RSA_SIZE,auth_hash_hash);
+        for (tx_counter = tx_counter ; tx_counter < RSA_SIZE + HASH_SIZE ; tx_counter ++)
+        {
+            tx_buffer[tx_counter] = auth_hash_hash[tx_counter - RSA_SIZE];
+        }
+
+        tx_buffer[tx_counter] = '\0';
+
         Serial.print("The whole message is: ");
         print_data((uint8_t *)tx_buffer, tx_counter);
 
-        // uint8_t decrypt[RSA_BLOCK_SIZE]={};
-        // rsa_private_decrypt(encrypted, client_public_key, client_private_key, decrypt);
-        // Serial.print("The decrypted message is: ");
-        // Serial.println((char*)decrypt);
+        
     }
 
     if (operation_type == client_mes_type(AES_KEY))
