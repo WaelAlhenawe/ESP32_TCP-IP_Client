@@ -126,31 +126,6 @@ static request_info request_parsing(uint8_t *message)
     return temp;
 }
 
-static bool check_hash(uint8_t *mes, const uint8_t *hash_res)
-{
-    Serial.println("I AM ON CHECK HASH: ");
-
-    bool flag = true;
-    uint8_t temp_hash[HASH_SIZE] = {};
-    sha1(mes, RSA_SIZE, temp_hash);
-
-    Serial.print("New hash is: ");
-    print_data(temp_hash, HASH_SIZE);
-
-    Serial.print("Old hash is: ");
-    print_data(hash_res, HASH_SIZE);
-
-    for (int i = 0; i < HASH_SIZE; i++)
-    {
-        if (!(hash_res[i] == temp_hash[i]))
-        {
-            flag = false;
-            break;
-        }
-    }
-    delay(10000);
-    return flag;
-}
 
 static message_info message_parsing(uint8_t *message)
 {
@@ -461,7 +436,7 @@ void loop()
                                 }
                                 break;
 
-                                case (5):
+                                case ('5'):
                                     digitalWrite(BUILTIN_LED, HIGH);
                                     build_response((uint8_t *)"Light ON", AES_KEY_SIZE, rx_buffer);
                                     break;
@@ -495,3 +470,5 @@ void loop()
         client_global.write((char *)rx_buffer);
         Serial.flush();
     }
+
+}
