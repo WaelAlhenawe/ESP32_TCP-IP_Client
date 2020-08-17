@@ -25,7 +25,6 @@
 #define SESSION_PERIOD (60000)
 
 static uint8_t tx_counter = 0U;
-static uint8_t attempt_counter = 0U;
 
 enum client_mes_type
 {
@@ -116,7 +115,7 @@ static request_info request_parsing(uint8_t *message)
     Serial.println("Session ID is: ");
     print_data(temp.session_Id, sizeof(temp.session_Id));
 
-    for (uint8_t i = SESSION_ID_SIZE; i < SESSION_ID_SIZE + AES_CIPHER_SIZE; i++)
+    for (uint8_t i = SESSION_ID_SIZE; i < SESSION_ID_SIZE + AES_BLOCK_SIZE; i++)
     {
         temp.request[i - SESSION_ID_SIZE] = message[i];
     }
@@ -125,7 +124,6 @@ static request_info request_parsing(uint8_t *message)
 
     return temp;
 }
-
 
 static message_info message_parsing(uint8_t *message)
 {
@@ -358,11 +356,13 @@ void loop()
 
                 if (strlen((char *)message_parsing(rx_buffer).message) == RSA_SIZE)
                 {
+                    encrypted_massage_size = RSA_SIZE;
                     decrypted_massage_size = RSA_BLOCK_SIZE;
                 }
                 else
                 {
-                    decrypted_massage_size = AES_CIPHER_SIZE;
+                    encrypted_massage_size = AES_CIPHER_SIZE;
+                    decrypted_massage_size = AES_BLOCK_SIZE;
                 }
 
                 uint8_t decrypt[decrypted_massage_size] = {};
@@ -470,5 +470,4 @@ void loop()
         client_global.write((char *)rx_buffer);
         Serial.flush();
     }
-
 }
