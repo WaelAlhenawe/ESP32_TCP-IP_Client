@@ -9,5 +9,9 @@
 			"path": "TCP_IP_Server"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"istream": "cpp"
+		}
+	}
 }

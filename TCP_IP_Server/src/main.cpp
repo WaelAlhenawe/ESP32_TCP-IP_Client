@@ -154,7 +154,7 @@ static message_info message_parsing(uint8_t *message)
         {
             temp.message[i] = message[i];
         }
-        Serial.println("Hash is: ");
+        Serial.println("Message is: ");
         print_data(temp.message, sizeof(temp.message));
 
         for (uint8_t i = AES_CIPHER_SIZE; i < AES_CIPHER_SIZE + HASH_SIZE; i++)
