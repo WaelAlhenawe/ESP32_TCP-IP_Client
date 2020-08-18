@@ -8,6 +8,9 @@
 #include <SHA1.h>
 #include <AES128.h>
 
+// #define SSID "YA-LOCAL"
+// #define PASSWORD "utbildning2020"
+
 #define SSID "Telia-ED8AC9"
 #define PASSWORD "05162D814F"
 
@@ -36,11 +39,7 @@ static uint8_t public_key_server[RSA_SIZE] = {
 // 0x56, 0x29, 0x30, 0xE2, 0x73, 0xD7, 0x6D, 0x57, 0x33, 0xA6, 0xAD, 0x4A, 0xD9, 0xD3, 0xF7, 0xA5,
 // 0x98, 0xF3, 0xFA, 0x07, 0x64, 0x7D, 0xE5, 0xE4, 0x4B, 0x13, 0x5C, 0x90, 0x38, 0xF4, 0x3B, 0x59 };
 
-
-
 static bool status = false;
-
-
 
 enum request_types
 {
@@ -100,33 +99,25 @@ static void services_menu(uint8_t *massage)
 
     while (!finish)
     {
-      //Serial.println("befor Serial Available");
-
       if (Serial.available())
       {
-        //Serial.println("Serial Available");
 
         char chr = Serial.read();
         if (chr == '\r')
         {
-          //Serial.println("Serial Available");
           chr = Serial.read();
         }
-        //Serial.println("Serial 11111");
 
         if (chr && chr != '\n')
         {
           Serial.println(chr);
-          // Serial.println("Serial 7777");
           massage[0] = (uint8_t)chr;
           Serial.println(massage[0]);
-          //Serial.println(*counter);
           massage[1] = (uint8_t)'\n';
           Serial.println(massage[1]);
 
           finish = true;
           flag = false;
-          //Serial.println("Serial 888888");
         }
       }
     }
@@ -285,7 +276,7 @@ static void build_request(uint8_t *session_Id, uint8_t *data, uint8_t data_size,
   }
   for (uint8_t x = data_size; x < data_size + HASH_SIZE; x++)
   {
-    buffer[x] = encrypted[x - data_size];
+    buffer[x] = hash[x - data_size];
   }
   buffer[x] = '\0';
 }
@@ -310,7 +301,7 @@ IPAddress secondaryDNS(8, 8, 4, 4); //optional
 
 //uint8_t temprature_sens_read();
 */
-
+uint8_t buffer_size;
 void setup()
 {
   /*   // Configures static IP address
@@ -342,6 +333,13 @@ void loop()
   //rsa_generate_keys(client_public_key, client_private_key);
 
   uint8_t auth_key[RSA_BLOCK_SIZE] = "kp2-5v8/B?E(H+VmY3wA";
+  // if(!status){
+  //   buffer_size = 84U;
+  // }
+  // else{
+  //   buffer_size = 36U;
+  // }
+  //char tx_buffer[buffer_size] = {};
 
   if (!status)
   {
@@ -351,18 +349,41 @@ void loop()
     Serial.print("First hash is: ");
     print_data((uint8_t *)auth_hash, HASH_SIZE);
 
-    uint8_t rsa_hash_auth[RSA_SIZE] = {};
-    rsa_private_encrypt(auth_hash, HASH_SIZE, client_public_key, client_private_key, rsa_hash_auth);
+    uint8_t sign_auth[RSA_SIZE] = {};
+    rsa_private_encrypt(auth_hash, HASH_SIZE, client_public_key, client_private_key, sign_auth);
+
+    uint8_t sign_first_part[RSA_BLOCK_SIZE] = {};
+    uint8_t sign_second_part[RSA_BLOCK_SIZE] = {};
+
+    for (uint8_t i = 0; i < RSA_BLOCK_SIZE; i++)
+    {
+      sign_first_part[i] = sign_auth[i];
+    }
+    for (uint8_t i = RSA_BLOCK_SIZE; i < RSA_SIZE; i++)
+    {
+      sign_second_part[i - RSA_BLOCK_SIZE] = sign_auth[RSA_BLOCK_SIZE];
+    }
+    
+    uint8_t en_sign_first_part[RSA_SIZE] = {};
+    uint8_t en_sign_second_part[RSA_SIZE] = {};
+
+    rsa_public_encrypt(sign_first_part, RSA_BLOCK_SIZE, public_key_server, en_sign_first_part);
+    rsa_public_encrypt(sign_first_part, RSA_BLOCK_SIZE, public_key_server, en_sign_first_part);
+
     for (tx_counter = 0; tx_counter < RSA_SIZE; tx_counter++)
     {
-      tx_buffer[tx_counter] = rsa_hash_auth[tx_counter];
+      tx_buffer[tx_counter] = en_sign_first_part[tx_counter];
+    }
+    for (tx_counter = tx_counter; tx_counter < (RSA_SIZE * 2); tx_counter++)
+    {
+      tx_buffer[tx_counter] = en_sign_second_part[tx_counter - RSA_SIZE];
     }
 
     uint8_t auth_hash_hash[HASH_SIZE] = {};
-    sha1(rsa_hash_auth, RSA_SIZE, auth_hash_hash);
-    for (tx_counter = tx_counter; tx_counter < RSA_SIZE + HASH_SIZE; tx_counter++)
+    sha1((uint8_t*) tx_buffer, (RSA_SIZE * 2) , auth_hash_hash);
+    for (tx_counter = tx_counter; tx_counter < (RSA_SIZE *2) + HASH_SIZE; tx_counter++)
     {
-      tx_buffer[tx_counter] = auth_hash_hash[tx_counter - RSA_SIZE];
+      tx_buffer[tx_counter] = auth_hash_hash[tx_counter - (RSA_SIZE*2)];
     }
 
     tx_buffer[tx_counter] = '\0';
@@ -379,19 +400,7 @@ void loop()
     uint8_t choice[2] = {};
     services_menu(choice);
     Serial.println("Menu Passed");
-    build_request( session_Id, choice, sizeof(choice) + SESSION_ID_SIZE, tx_buffer);
-
-    /*uint8_t temp_encrypt[AES_CIPHER_SIZE] ={};
-        uint8_t temp_decrypt[AES_BLOCK_SIZE] ={};
-
-        for (uint8_t i = 1; i < AES_CIPHER_SIZE+1; i++)
-        {
-                temp_encrypt[i-1] = tx_buffer[i];
-            
-        }
-        aes128_decrypt(temp_encrypt, temp_decrypt);
-        Serial.print("TEST TEST TSET::::");
-        Serial.println((char*) temp_decrypt);*/
+    build_request(session_Id, choice, sizeof(choice) + SESSION_ID_SIZE, tx_buffer);
   }
 
   if (tx_buffer[tx_counter] == '\0')
@@ -409,7 +418,7 @@ void loop()
 
         Serial.println("I am here3");
 
-        uint8_t rx_buffer[BUFFER_SIZE] = {};
+        uint8_t rx_buffer[buffer_size] = {};
 
         while (!strlen((char *)rx_buffer))
         {
