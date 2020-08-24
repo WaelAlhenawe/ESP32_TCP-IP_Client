@@ -16,6 +16,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install platformio
     - name: Run PlatformIO
-      run: platformio ci --lib="." --lib="/tmp/spi4teensy3-master" --board=uno --board=esp --board=due
+      run: platformio ci --lib="." --lib="/AES" --board=uno --board=esp --board=due
 
       
