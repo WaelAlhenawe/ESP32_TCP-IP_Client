@@ -11,7 +11,10 @@
 	],
 	"settings": {
 		"files.associations": {
-			"istream": "cpp"
+			"istream": "cpp",
+			"ostream": "cpp",
+			"array": "cpp",
+			"string": "cpp"
 		}
 	}
 }

@@ -7,7 +7,6 @@
 #include <RSA.h>
 #include <SHA1.h>
 #include <AES128.h>
-#include <time.h>
 
 // #define SSID "YA-LOCAL"
 // #define PASSWORD "utbildning2020"
@@ -15,81 +14,48 @@
 #define SSID "Telia-ED8AC9"
 #define PASSWORD "05162D814F"
 
-#define NUMBER_OF_ATTEMPT (3U)
-#define SESSION_ID_SIZE (4U)
-
 #define PORT (12345U)
-#define MAX_CLIENTS (8U)
 #define BUFFER_SIZE (128U)
 #define HASH_SIZE (20U)
-#define SESSION_PERIOD (60000)
-#define AUTH_MES_SIZE (84)
-#define REQ_MES_SIZE (36)
+#define SESSION_PERIOD (60000U)
+#define AUTH_MES_SIZE (84U)
+#define AUTH_MES_SIZE_NO_HASH (64U)
+#define REQ_MES_SIZE (36U)
+#define TYPE_MES_SIZE (2U)
+#define NUMBER_OF_ATTEMPT (3U)
+#define SESSION_ID_SIZE (3U)
 
-static uint8_t tx_counter = 0U;
-
-// enum client_mes_type
-// {
-//     AUTH = 1,
-//     AES_KEY,
-//     REQUEST
-// };
-
-// enum server_mes_type
-// {
-//     AUTH_OK = 1,
-//     AES_OK,
-//     DONE,
-//     RE_AUTH,
-//     ERROR,
-//     RE_DO
-// };
 enum request_types
 {
     LED_ON = 1,
     LED_OFF,
-    TEMPERATURE
+    TEMPERATURE,
+    END_SESSION,
+    ERROR
 };
 
-enum error_typs
+enum server_response
 {
-    NOT_RESEIVED = 1,
-    NOT_AUTH,
-    SESSION_END,
+  REQUEST_DONE = 0,
+  NOT_RESEIVED,
+  NOT_AUTH,
+  SESSION_END,
 };
 
-struct message_info
+typedef struct
 {
-    uint8_t first_part_message[RSA_SIZE] = {};
-    uint8_t second_part_message[RSA_SIZE] = {};
-    uint8_t request_message[AES_CIPHER_SIZE] = {};
-    uint8_t hash_value[HASH_SIZE] = {};
-};
+    uint8_t *the_whole_mes = {};
+    uint8_t the_secret[HASH_SIZE] = {};
+    uint8_t session_Id[SESSION_ID_SIZE] = {};
+    uint8_t request[AES_BLOCK_SIZE - SESSION_ID_SIZE] = {};
+} message_info;
 
-struct request_info
+typedef struct
 {
     uint8_t session_Id[SESSION_ID_SIZE] = {};
-    uint8_t request[AES_BLOCK_SIZE] = {};
-};
+    uint32_t end_session;
+} session_t;
 
-struct session
-{
-    uint8_t session_Id[SESSION_ID_SIZE] = {};
-    unsigned long long end_session;
-};
-session client_session;
-static void print_data(const uint8_t *data, uint8_t size)
-{
-    for (uint8_t i = 0; i < size; i++)
-    {
-        Serial.printf("%02X ", data[i]);
-    }
-    Serial.println();
-}
-
-static bool status = false;
-
-//static uint8_t exponent[] ={ 0x00, 0x01, 0x00, 0x01 };
 static uint8_t auth_hash_key[HASH_SIZE] = {
     0x6E, 0x31, 0x2B, 0x1F, 0xAC, 0x84, 0xB7, 0x9C, 0x56, 0x3F,
     0x3E, 0xE8, 0x98, 0x29, 0xC0, 0x0C, 0xEC, 0xB3, 0xEE, 0xBD};
@@ -103,211 +69,171 @@ static uint8_t public_key_client[RSA_SIZE] = {
     0xDB, 0x44, 0xDD, 0xA4, 0xB7, 0xAB, 0x9D, 0x86, 0x2B, 0xBD, 0xC1, 0xFD, 0x67, 0xC9, 0x0B, 0xAF,
     0x05, 0x76, 0x3E, 0x4E, 0xD3, 0xD1, 0xDF, 0x9B, 0x7A, 0x75, 0x6E, 0x4C, 0x5F, 0x63, 0x63, 0x75};
 
-const uint8_t *key;
-
-// const uint8_t *key = {};
 static WiFiServer server(PORT);
 static WiFiClient client_global;
 uint8_t hash[HASH_SIZE] = {};
-uint8_t auth_key[RSA_BLOCK_SIZE] = "kp2-5v8/B?E(H+VmY3wA";
+static bool authorized = false;
+static uint8_t tx_counter = 0U;
+session_t client_session;
+const uint8_t *key;
 
-static request_info request_parsing(uint8_t *message)
+static void print_data(const uint8_t *data, uint8_t size)
 {
-
-    Serial.println("I AM ON REQUEST PARSING: ");
-    Serial.printf("Recived message lenght is = %d \n", strlen((char *)message));
-    request_info temp;
-    for (uint8_t i = 0; i < SESSION_ID_SIZE; i++)
+    for (uint8_t i = 0; i < size; i++)
     {
-        temp.session_Id[i] = message[i];
+        Serial.printf("%02X ", data[i]);
     }
-    Serial.println("Session ID is: ");
-    print_data(temp.session_Id, sizeof(temp.session_Id));
-
-    for (uint8_t i = SESSION_ID_SIZE; i < SESSION_ID_SIZE + AES_BLOCK_SIZE; i++)
-    {
-        temp.request[i - SESSION_ID_SIZE] = message[i];
-    }
-    Serial.println("Reqest is: ");
-    print_data(temp.request, sizeof(temp.request));
-
-    return temp;
+    Serial.println();
 }
 
-static message_info message_parsing(uint8_t *message)
+static message_info message_parsing(message_info message_details, uint8_t mes_len, uint8_t *message)
 {
+
+#ifdef DEVELOPMENT
     Serial.println("I AM ON MESSAGE PARSING: ");
-    Serial.printf("Recived message lenght is = %d \n", strlen((char *)message));
-
-    message_info temp = {};
-
-    if (strlen((char *)message) == AUTH_MES_SIZE)
+#endif
+    message_info decrypted_pieces = message_details;
+    if (mes_len == AUTH_MES_SIZE)
     {
-        for (uint8_t i = 0; i < RSA_SIZE; i++)
-        {
-            temp.first_part_message[i] = message[i];
-        }
-        for (uint8_t i = RSA_SIZE; i < RSA_SIZE * 2; i++)
-        {
-            temp.second_part_message[i - RSA_SIZE] = message[i];
-        }
-        Serial.println("first part is: ");
-        print_data(temp.first_part_message, sizeof(temp.first_part_message));
-        Serial.println("second part is: ");
-        print_data(temp.second_part_message, sizeof(temp.second_part_message));
+        uint8_t *first_part, *second_part, *decrypt_first_part, *decrypt_second_part, *encrypt_secret, *temp;
+        first_part = (uint8_t *)malloc(RSA_SIZE);
+        second_part = (uint8_t *)malloc(RSA_SIZE);
+        decrypt_first_part = (uint8_t *)malloc(RSA_SIZE);
+        decrypt_second_part = (uint8_t *)malloc(RSA_SIZE - RSA_BLOCK_SIZE);
+        encrypt_secret = (uint8_t *)malloc(RSA_SIZE);
 
-        for (uint8_t i = (RSA_SIZE * 2); i < (RSA_SIZE * 2) + HASH_SIZE; i++)
-        {
-            temp.hash_value[i - (RSA_SIZE * 2)] = message[i];
-        }
-        Serial.println("Hsah is: ");
-        print_data(temp.hash_value, sizeof(temp.hash_value));
+        memcpy(first_part, message, RSA_SIZE);
+        memcpy(second_part, &*message + RSA_SIZE, RSA_SIZE);
+
+        rsa_private_decrypt(first_part, public_key, private_key, decrypt_first_part);
+        rsa_private_decrypt(second_part, public_key, private_key, decrypt_second_part);
+
+        memcpy(encrypt_secret, decrypt_first_part, RSA_BLOCK_SIZE);
+        temp = &*encrypt_secret + RSA_BLOCK_SIZE;
+        memcpy(temp, decrypt_second_part, RSA_SIZE - RSA_BLOCK_SIZE);
+
+#ifdef DEVELOPMENT
+        Serial.println("Will decrypt By RSA:");
+        Serial.print("First Decrypt part is: ");
+        print_data(decrypt_first_part, RSA_BLOCK_SIZE);
+        Serial.print("Second Decrypt part is: ");
+        print_data(decrypt_second_part, RSA_SIZE - RSA_BLOCK_SIZE);
+        Serial.print("The Secret is: ");
+        print_data(encrypt_secret, RSA_SIZE);
+#endif
+
+        rsa_public_decrypt(encrypt_secret, public_key_client, decrypted_pieces.the_secret);
+#ifdef DEVELOPMENT
+        Serial.print("The first Hash is: ");
+        print_data(decrypted_pieces.the_secret, HASH_SIZE);
+#endif
+        free(first_part);
+        free(second_part);
+        free(decrypt_first_part);
+        free(decrypt_second_part);
+        free(encrypt_secret);
     }
-    if (strlen((char *)message) == REQ_MES_SIZE)
+
+    if (mes_len == REQ_MES_SIZE)
     {
+#ifdef DEVELOPMENT
         Serial.println("I AM ON REQUEST PARSING: ");
-        Serial.printf("Recived message lenght is = %d \n", strlen((char *)message));
+#endif
+        uint8_t *request, *decrypt_request;
 
-        for (uint8_t i = 0; i < AES_CIPHER_SIZE; i++)
-        {
-            temp.request_message[i] = message[i];
-        }
+        request = (uint8_t *)malloc(AES_CIPHER_SIZE);
+        decrypt_request = (uint8_t *)malloc(AES_BLOCK_SIZE);
+        memcpy(request, message, AES_CIPHER_SIZE);
+
+        aes128_decrypt(request, decrypt_request);
+#ifdef DEVELOPMENT
         Serial.println("Request is: ");
-        print_data(temp.request_message, sizeof(temp.request_message));
-
-        for (uint8_t i = AES_CIPHER_SIZE; i < AES_CIPHER_SIZE + HASH_SIZE; i++)
-        {
-            temp.hash_value[i - AES_CIPHER_SIZE] = message[i];
-        }
-        Serial.println("Hsah is: ");
-        print_data(temp.hash_value, sizeof(temp.hash_value));
+        print_data(decrypt_request, AES_BLOCK_SIZE);
+        Serial.println("Will decrypt By AES:");
+#endif
+        memcpy(decrypted_pieces.session_Id, decrypt_request, SESSION_ID_SIZE);
+        memcpy(decrypted_pieces.request, &*decrypt_request + SESSION_ID_SIZE, AES_BLOCK_SIZE - SESSION_ID_SIZE);
+        free(request);
+        free(decrypt_request);
     }
-    return temp;
+    return decrypted_pieces;
 }
 
-static bool check_hash(const bool check_type, uint8_t *the_whole_message)
+static uint8_t *check_hash(uint8_t mes_len, uint8_t *the_whole_message)
 {
-    Serial.println("I AM ON CHECK HASH: ");
-    bool flag = true;
-    uint8_t temp_hash[HASH_SIZE] = {};
-    uint8_t received_hash[HASH_SIZE] = {};
 
-    if (!check_type)
+    uint8_t *the_mes, *res_hash, *temp_hash;
+    the_mes = (uint8_t *)malloc(mes_len-HASH_SIZE);
+    res_hash = (uint8_t *)malloc(HASH_SIZE);
+    temp_hash = (uint8_t *)malloc(HASH_SIZE);
+
+    memcpy(the_mes, the_whole_message, mes_len - HASH_SIZE);
+
+    memcpy(res_hash, &*the_whole_message + (mes_len - HASH_SIZE), HASH_SIZE);
+
+    sha1(the_mes, mes_len - HASH_SIZE, temp_hash);
+
+    if (!memcmp(temp_hash, res_hash, HASH_SIZE))
     {
-        uint8_t temp_message[AUTH_MES_SIZE - HASH_SIZE] = {};
-        for (uint8_t i = 0; i < AUTH_MES_SIZE - HASH_SIZE; i++)
-        {
-            temp_message[i] = the_whole_message[i];
-        }
-        for (uint8_t i = AUTH_MES_SIZE - HASH_SIZE; i < AUTH_MES_SIZE; i++)
-        {
-            received_hash[i - (AUTH_MES_SIZE - HASH_SIZE)] = the_whole_message[i];
-        }
-        sha1(temp_message, AUTH_MES_SIZE - HASH_SIZE, temp_hash);
-    }
-
-    if (check_type)
-    {
-        uint8_t temp_message[REQ_MES_SIZE - HASH_SIZE] = {};
-        for (uint8_t i = 0; i < REQ_MES_SIZE - HASH_SIZE; i++)
-        {
-            temp_message[i] = the_whole_message[i];
-        }
-        for (uint8_t i = REQ_MES_SIZE - HASH_SIZE; i < REQ_MES_SIZE; i++)
-        {
-            received_hash[i - (REQ_MES_SIZE - HASH_SIZE)] = the_whole_message[i];
-        }
-        sha1(temp_message, REQ_MES_SIZE - HASH_SIZE, temp_hash);
-    }
-    Serial.print("Old hash is: ");
-    print_data(received_hash, HASH_SIZE);
-    Serial.print("New hash is: ");
-    print_data(temp_hash, HASH_SIZE);
-
-    for (int i = 0; i < HASH_SIZE; i++)
-    {
-        if (!(received_hash[i] == temp_hash[i]))
-        {
-            flag = false;
-            break;
-        }
-    }
-    delay(10000);
-    return flag;
-}
-
-static void build_response(uint8_t *data, uint8_t data_size, uint8_t *buffer)
-{
-    Serial.println("I AM ON BUILD RESPONSE: ");
-
-    uint8_t hash[HASH_SIZE] = {};
-
-    if (data_size == 20)
-    {
-        uint8_t encrypted[RSA_SIZE] = {};
-        rsa_public_encrypt(data, data_size, public_key_client, encrypted);
-
-        for (tx_counter = 0; tx_counter < RSA_SIZE; tx_counter++)
-        {
-            buffer[tx_counter] = encrypted[tx_counter];
-        }
-        // Debug
-        Serial.print("Encrypted RSA is: ");
-        print_data(encrypted, sizeof(encrypted));
-
-        sha1(encrypted, RSA_SIZE, hash);
-        // Debug
-        Serial.print("Hash RSA is: ");
-        print_data(hash, sizeof(hash));
-
-        for (tx_counter = RSA_SIZE; tx_counter < HASH_SIZE + RSA_SIZE; tx_counter++)
-        {
-            buffer[tx_counter] = hash[tx_counter - RSA_SIZE];
-        }
-        buffer[tx_counter] = '\0';
+        Serial.println("THE FIRST");
+        free(res_hash);
+        free(temp_hash);
+        return the_mes;
     }
     else
     {
-        uint8_t encrypted[AES_CIPHER_SIZE] = {};
-        aes128_encrypt(data, data_size, encrypted);
-
-        // Debug
-        Serial.print("Encrypt AES is: ");
-        print_data(encrypted, sizeof(encrypted));
-        for (tx_counter = 0; tx_counter < AES_CIPHER_SIZE; tx_counter++)
-        {
-            buffer[tx_counter] = encrypted[tx_counter];
-        }
-        sha1(encrypted, AES_CIPHER_SIZE, hash);
-
-        // Debug
-        Serial.print("Hash AES is: ");
-        print_data(hash, sizeof(hash));
-
-        for (tx_counter = AES_CIPHER_SIZE; tx_counter < HASH_SIZE + AES_CIPHER_SIZE; tx_counter++)
-        {
-            buffer[tx_counter] = hash[tx_counter - AES_CIPHER_SIZE];
-        }
-        buffer[tx_counter] = '\0';
+        free(temp_hash);
+        free(res_hash);
+        return 0;
     }
 }
 
-static bool check_matching(const uint8_t *first, const uint8_t *second)
+static void build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_t *buffer)
 {
-    bool flag = true;
+#ifdef DEVELOPMENT
+    Serial.println("I AM ON BUILD RESPONSE: ");
+#endif
+    uint8_t hash[HASH_SIZE] = {};
+    uint8_t encryption_size, *encrypted_data;
 
-    for (uint8_t i = 0; i < RSA_BLOCK_SIZE; i++)
+    if (mes_len == AUTH_MES_SIZE)
     {
-        if (!(second[i] == first[i]))
-        {
-            flag = false;
-            break;
-        }
+        encryption_size = RSA_SIZE;
+        encrypted_data = (uint8_t *)malloc(encryption_size);
+        rsa_public_encrypt(data, data_size, public_key_client, encrypted_data);
+        tx_counter = (AUTH_MES_SIZE- RSA_SIZE);
+
     }
-    return flag;
+    if (mes_len == REQ_MES_SIZE)
+    {
+        encryption_size = AES_CIPHER_SIZE;
+        encrypted_data = (uint8_t *)malloc(encryption_size);
+        aes128_encrypt(data, data_size, encrypted_data);
+        tx_counter = REQ_MES_SIZE;
+
+    }
+    memcpy(buffer, encrypted_data, encryption_size);
+
+#ifdef DEVELOPMENT
+    Serial.print("Encryption is: ");
+    print_data(encrypted_data, encryption_size);
+#endif
+
+    sha1(encrypted_data, encryption_size, hash);
+
+#ifdef DEVELOPMENT
+    Serial.print("Hash is: ");
+    print_data(hash, sizeof(hash));
+#endif
+    memcpy(&*buffer + encryption_size, hash, HASH_SIZE);
+#ifdef DEVELOPMENT
+    Serial.print("rx_buffer inside 2 is: ");
+    print_data(buffer, RSA_SIZE + HASH_SIZE);
+#endif
+free(encrypted_data);
 }
 
-static void keys_generater(uint8_t key_holder[], uint8_t key_size)
+static void Session_Id_generater(uint8_t key_holder[], uint8_t key_size)
 {
     for (uint8_t i = 0; i < key_size; i++)
     {
@@ -315,20 +241,22 @@ static void keys_generater(uint8_t key_holder[], uint8_t key_size)
     }
 }
 
-static session session_creater()
+static session_t session_creater()
 {
-    session temp;
-    keys_generater(temp.session_Id, SESSION_ID_SIZE);
+    session_t temp;
+    Session_Id_generater(temp.session_Id, SESSION_ID_SIZE);
     temp.end_session = millis() + SESSION_PERIOD;
-    Serial.printf("\nEnd Session is %llu, In creation \n", temp.end_session);
+
+#ifdef DEVELOPMENT
+    Serial.printf("\nEnd Session is %d, In creation \n", temp.end_session);
+#endif
 
     return temp;
 }
 
-static bool session_check(session ses)
+static bool session_check(session_t ses)
 {
     bool flag;
-    ;
     if (ses.end_session - millis() <= SESSION_PERIOD)
     {
         flag = true;
@@ -339,13 +267,55 @@ static bool session_check(session ses)
     }
     return flag;
 }
-uint8_t buffer_size;
+
+static uint8_t check_mes_len(uint8_t *mes)
+{
+    uint8_t mes_len = 0, counter = 0;
+
+    for (uint8_t i = 0; i < BUFFER_SIZE; i++)
+    {
+        if (mes[i] == (0x00))
+        {
+            if (counter < 3)
+            {
+                if (counter == 0)
+                {
+                    mes_len = i;
+                }
+                counter++;
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            counter = 0;
+        }
+    }
+    return mes_len;
+}
+
+static void join_message(server_response type, uint8_t *message, uint8_t *buffer)
+{
+    buffer[0] = type;
+    memcpy(&*buffer + 1, message, strlen((char*)message));
+    buffer[strlen((char*)message)+1]='\0';
+
+#ifdef DEVELOPMENT
+    Serial.print("Joined Message is:");
+    print_data(buffer, strlen((char*)message) + 1);
+#endif
+}
 
 void setup()
 {
-
     Serial.begin(9600);
-    delay(3000);
+    while (!Serial)
+    {
+        delay(100);
+    }
 
     WiFi.begin(SSID, PASSWORD);
 
@@ -358,150 +328,172 @@ void setup()
     Serial.print("\nIP Address: ");
     Serial.println(WiFi.localIP());
     pinMode(BUILTIN_LED, OUTPUT);
-
     server.begin();
 }
 
 void loop()
 {
-    uint8_t rx_buffer[buffer_size] = {};
+    uint8_t rx_buffer[BUFFER_SIZE] = {};
 
     WiFiClient client = server.available();
+
     if (client)
     {
-
-        if (!client_global.connected())
-        {
-            client_global = client;
-        }
+        client_global = client;
     }
 
     if (client_global.connected() && client_global.available())
     {
-        //uint8_t rx_buffer[BUFFER_SIZE] = {};
+        client_global.read(rx_buffer, BUFFER_SIZE);
 
-        client_global.read(rx_buffer, sizeof(rx_buffer));
+#ifdef DEVELOPMENT
+        Serial.print("Read Buffer is : ");
+        print_data(rx_buffer, BUFFER_SIZE);
+#endif
 
-        // Error Receiving 1
-        if (strlen((char *)rx_buffer))
+        message_info message_details;
+        uint8_t mes_len;
+        if ((mes_len = check_mes_len(rx_buffer)))
         {
-            message_info message_details;
-            if (check_hash(status, rx_buffer))
+            Serial.print("Mes_Len is : ");
+            Serial.println((int)mes_len);
+
+            if ((message_details.the_whole_mes = check_hash(mes_len, rx_buffer)))
             {
-                message_details = message_parsing(rx_buffer);
-                if (!status)
+                message_details = message_parsing(message_details, mes_len, rx_buffer);
+                if (mes_len == AUTH_MES_SIZE)
                 {
-                    uint8_t decrypt_1[RSA_BLOCK_SIZE] = {};
-                    uint8_t decrypt_2[RSA_BLOCK_SIZE] = {};
-                    Serial.println("Will decrypt By RSA:");
-                    rsa_private_decrypt(message_details.first_part_message, public_key, private_key, decrypt_1);
-                    rsa_private_decrypt(message_details.second_part_message, public_key, private_key, decrypt_2);
-                    uint8_t encrypt_secret[RSA_SIZE] = {};
-                    for (uint8_t i = 0; i < RSA_BLOCK_SIZE; i++)
-                    {
-                        encrypt_secret[i] = decrypt_1[i];
-                    }
-
-                    for (uint8_t i = RSA_BLOCK_SIZE; i < RSA_SIZE; i++)
-                    {
-                        encrypt_secret[i] = decrypt_2[i - RSA_BLOCK_SIZE];
-                    }
-                    uint8_t decrypt[RSA_BLOCK_SIZE] = {};
-                    rsa_public_decrypt(encrypt_secret, public_key_client, decrypt);
-
-                    if (check_matching(decrypt, auth_hash_key))
+                    if (!memcmp(message_details.the_secret, auth_hash_key, HASH_SIZE))
                     {
                         key = aes128_init_key(NULL);
+                        client_session = session_creater();
+
+#ifdef DEVELOPMENT
                         Serial.print("AES Key: ");
                         print_data(key, AES_KEY_SIZE);
-                        client_session = session_creater();
                         Serial.print("Session ID: ");
                         print_data(client_session.session_Id, SESSION_ID_SIZE);
-                        uint8_t temp_message[SESSION_ID_SIZE + AES_KEY_SIZE] = {};
-                        strcpy((char *)temp_message, (char *)client_session.session_Id);
-                        strcpy((char *)temp_message, (char *)key);
+#endif
 
-                        build_response(temp_message, sizeof(temp_message), rx_buffer);
+                        uint8_t temp_message[SESSION_ID_SIZE + AES_KEY_SIZE] = {};
+                        for (uint8_t i = 0; i < SESSION_ID_SIZE; i++)
+                        {
+                            temp_message[i] = client_session.session_Id[i];
+                        }
+                        for (uint8_t i = SESSION_ID_SIZE; i < SESSION_ID_SIZE + AES_KEY_SIZE; i++)
+                        {
+                            temp_message[i] = key[i - SESSION_ID_SIZE];
+                        }
+
+#ifdef DEVELOPMENT
+                        Serial.println("Temp Message is: ");
+                        print_data(temp_message, SESSION_ID_SIZE + AES_KEY_SIZE);
+#endif
+
+                        build_response(mes_len, temp_message, sizeof(temp_message), rx_buffer);
+                        authorized = true;
                     }
                     else
                     {
                         Serial.println("NOT Auth");
-                        build_response((uint8_t *)"NOT Auth", RSA_BLOCK_SIZE, rx_buffer);
+                        join_message(server_response(NOT_AUTH),(uint8_t *) "NOT Auth", rx_buffer);
+                        build_response(mes_len, rx_buffer, sizeof("NOT Auth") + 1, rx_buffer);
                     }
                 }
-                else
+                else if (mes_len == REQ_MES_SIZE)
                 {
-                    request_info request_details;
-                    uint8_t decrypt[AES_CIPHER_SIZE] = {};
-                    Serial.println("Will decrypt By AES:");
-                    aes128_decrypt(message_details.request_message, decrypt);
-                    request_details = request_parsing(decrypt);
-                    if (check_matching(client_session.session_Id, request_details.session_Id))
+
+                    if (!memcmp(client_session.session_Id, message_details.session_Id, SESSION_ID_SIZE))
                     {
                         if (session_check(client_session))
                         {
-                            Serial.printf("\nEnd Session is %llu, After Check \n", client_session.end_session);
+
+#ifdef DEVELOPMENT
+                            Serial.printf("\nEnd Session is %d, After Check \n", client_session.end_session);
+                            Serial.printf("\nMillis is %d, After Check \n", millis());
+
+#endif
                             client_session.end_session = millis() + SESSION_PERIOD;
-                            Serial.printf("\nEnd Session is %llu, After Renew \n", client_session.end_session);
-                            switch ((char)request_details.request[0])
+
+#ifdef DEVELOPMENT
+                            Serial.printf("\nEnd Session is %d, After Renew \n", client_session.end_session);
+
+#endif
+                            switch ((char)message_details.request[0])
                             {
                             case ('1'):
+
+#ifdef DEVELOPMENT
                                 Serial.println("I am in Led ON");
-                                Serial.printf("\nEnd Session is %llu, 1 \n", client_session.end_session);
+                                Serial.printf("\nEnd Session is %d, 1 \n", client_session.end_session);
+#endif
+
                                 digitalWrite(BUILTIN_LED, HIGH);
-                                build_response((uint8_t *)"Light ON", sizeof("Light ON"), rx_buffer);
+                                join_message(server_response(OK), (uint8_t *)"Light ON", rx_buffer);
+                                build_response(mes_len, rx_buffer, sizeof("Light ON")+ 1, rx_buffer);
                                 break;
 
                             case ('2'):
 
                                 digitalWrite(BUILTIN_LED, LOW);
-                                build_response((uint8_t *)"Light OFF", sizeof("Light OFF"), rx_buffer);
+                                join_message(server_response(OK),(uint8_t *) "Light OFF", rx_buffer);
+                                build_response(mes_len, rx_buffer, sizeof("Light OFF") + 1, rx_buffer);
                                 break;
 
                             case ('3'):
-                                digitalWrite(BUILTIN_LED, HIGH);
-                                build_response((uint8_t *)"Light ON", AES_KEY_SIZE, rx_buffer);
-                                break;
-
-                            case ('4'):
                             {
                                 char temp[6];
                                 float x = temperatureRead();
                                 dtostrf(x, 5, 2, temp);
-                                char messeage[] = "Temperature: ";
-
-                                build_response((uint8_t *)temp, sizeof(temp), rx_buffer);
-                                strcat(messeage, temp);
+                                join_message(server_response(OK),(uint8_t *) temp, rx_buffer);
+                                build_response(mes_len, rx_buffer, sizeof(temp) + 1, rx_buffer);
                             }
                             break;
 
-                            case ('5'):
-                                digitalWrite(BUILTIN_LED, HIGH);
-                                build_response((uint8_t *)"Light ON", AES_KEY_SIZE, rx_buffer);
+                            case ('4'):
+                                client_session.end_session -= SESSION_PERIOD;
+                                join_message(server_response(OK),(uint8_t *)"Session Ended", rx_buffer);
+                                build_response(mes_len, rx_buffer, sizeof("Session Ended")+1, rx_buffer);
                                 break;
                             }
                         }
-                    }
-                    else
-                    {
-                        Serial.println("Session End");
-                        build_response((uint8_t *)"Session End", AES_KEY_SIZE, rx_buffer);
+                        else
+                        {
+                            Serial.println("Session End");
+                            join_message(server_response(SESSION_END),(uint8_t *)"Session End", rx_buffer);
+                            build_response(mes_len, rx_buffer, sizeof("Session End")+1, rx_buffer);
+                        }
                     }
                 }
-            }
-
-            else
-            {
-                Serial.println("Error Receiving2");
-                build_response((uint8_t *)"Error Receiving", AES_KEY_SIZE, rx_buffer);
+                else
+                {
+                    Serial.println("ELSE!!!!!!!!!!!!");
+                    // if (mes_len == AUTH_MES_SIZE){
+                    // {
+                    // }
+                    // else if (mes_len == REQ_MES_SIZE)
+                    // {
+                    // }
+                    // else
+                    // {
+                    //     build_response
+                    // }
+                }
             }
         }
         else
         {
-            Serial.println("Error Receiving1");
-            build_response((uint8_t *)"Error Receiving", AES_KEY_SIZE, rx_buffer);
+            Serial.println("Error Receiving2");
+            build_response(mes_len, (uint8_t *)server_response(NOT_RESEIVED), sizeof((uint8_t *)server_response(NOT_RESEIVED)), rx_buffer);
         }
-        client_global.write((char *)rx_buffer);
-        Serial.flush();
+#ifdef DEVELOPMENT
+        Serial.print("rx_buffer outside is: ");
+        print_data((uint8_t *)rx_buffer, BUFFER_SIZE);
+#endif
+        client_global.write_P((char *)rx_buffer, tx_counter);
+        //client_global.write((char *)rx_buffer);
+        memset(rx_buffer, 0, BUFFER_SIZE);
     }
+
+    //delay(7000);
 }
