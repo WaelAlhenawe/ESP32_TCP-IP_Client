@@ -16,4 +16,5 @@ jobs:
         python -m pip install --upgrade pip
         pip install platformio
     - name: Run PlatformIO
-      run: platformio run -d ${{ matrix.example }}
+      run: platformio run 
+      
