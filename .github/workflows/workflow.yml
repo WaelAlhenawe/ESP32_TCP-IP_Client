@@ -26,4 +26,4 @@ jobs:
           pip install platformio
       - name: Build examples
         run: |
-          platformio run -d ${{ projects }}
+          platformio run -d ${{ matrix.projects }}
