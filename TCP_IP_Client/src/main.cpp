@@ -73,6 +73,7 @@ uint8_t rx_buffer[BUFFER_SIZE] = {};
 uint8_t auth_key[RSA_BLOCK_SIZE] = "kp2-5v8/B?E(H+VmY3wA";
 const uint8_t *key = {};
 
+// To print data in hex
 static void print_data(const uint8_t *data, uint8_t size)
 {
   for (uint8_t i = 0; i < size; i++)
