@@ -1,11 +1,15 @@
-#include "Server.h"
+#include <Server.h>
 
 
-#define SSID "YA-LOCAL"
-#define PASSWORD "utbildning2020"
+// #define SSID "YA-LOCAL"
+// #define PASSWORD "utbildning2020"
 
-// #define SSID "Telia-ED8AC9"
-// #define PASSWORD "05162D814F"
+#define SSID "Telia-ED8AC9"
+#define PASSWORD "05162D814F"
+
+static uint8_t auth_hash_key[HASH_SIZE] = {
+    0x6E, 0x31, 0x2B, 0x1F, 0xAC, 0x84, 0xB7, 0x9C, 0x56, 0x3F,
+    0x3E, 0xE8, 0x98, 0x29, 0xC0, 0x0C, 0xEC, 0xB3, 0xEE, 0xBD};
 
 static bool authorized = false;
 static uint8_t tx_counter = 0U;

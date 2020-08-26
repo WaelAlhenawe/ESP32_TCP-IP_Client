@@ -10,6 +10,15 @@
 
 #include <Server.h>
 
+static uint8_t public_key[RSA_SIZE] = {
+    0xC3, 0xA5, 0x4E, 0x87, 0xAD, 0xC6, 0xA4, 0x02, 0x11, 0x0B, 0xF2, 0x75, 0xE3, 0xB6, 0x6D, 0xE6,
+    0x55, 0xA0, 0x17, 0x60, 0x16, 0xC2, 0x12, 0x58, 0xA9, 0xC6, 0xF5, 0x91, 0xCD, 0xB7, 0xA7, 0xA9};
+static uint8_t private_key[RSA_SIZE] = {
+    0x56, 0x29, 0x30, 0xE2, 0x73, 0xD7, 0x6D, 0x57, 0x33, 0xA6, 0xAD, 0x4A, 0xD9, 0xD3, 0xF7, 0xA5,
+    0x98, 0xF3, 0xFA, 0x07, 0x64, 0x7D, 0xE5, 0xE4, 0x4B, 0x13, 0x5C, 0x90, 0x38, 0xF4, 0x3B, 0x59};
+static uint8_t public_key_client[RSA_SIZE] = {
+    0xDB, 0x44, 0xDD, 0xA4, 0xB7, 0xAB, 0x9D, 0x86, 0x2B, 0xBD, 0xC1, 0xFD, 0x67, 0xC9, 0x0B, 0xAF,
+    0x05, 0x76, 0x3E, 0x4E, 0xD3, 0xD1, 0xDF, 0x9B, 0x7A, 0x75, 0x6E, 0x4C, 0x5F, 0x63, 0x63, 0x75};
 
 // To print data in Hex
 void print_data(const uint8_t *data, uint8_t size)
@@ -24,29 +33,27 @@ void print_data(const uint8_t *data, uint8_t size)
 
 message_info message_decrypting( uint8_t mes_len, uint8_t *message)
 {
-
 #ifdef DEVELOPMENT
     Serial.println("\n//.....................I AM IN MESSAGE DECRYPTING.....................//\n");
 #endif
+
     message_info decrypted_pieces;
     if (mes_len == AUTH_MES_SIZE)
     {
+
 #ifdef DEVELOPMENT
         Serial.println("I AM ON AUTHENTICATION DECRYPTING: ");
         Serial.println("Will decrypt By RSA:");
 #endif
-        uint8_t first_part[RSA_SIZE], second_part[RSA_SIZE], decrypt_first_part[RSA_SIZE],
-            decrypt_second_part[RSA_SIZE - RSA_BLOCK_SIZE], encrypt_secret[RSA_SIZE], *temp;
+        uint8_t decrypt_first_part[RSA_SIZE],
+                decrypt_second_part[RSA_SIZE - RSA_BLOCK_SIZE], 
+                encrypt_secret[RSA_SIZE];
 
-        memcpy(first_part, message, RSA_SIZE);
-        memcpy(second_part, &*message + RSA_SIZE, RSA_SIZE);
-
-        rsa_private_decrypt(first_part, public_key, private_key, decrypt_first_part);
-        rsa_private_decrypt(second_part, public_key, private_key, decrypt_second_part);
+        rsa_private_decrypt(message, public_key, private_key, decrypt_first_part);
+        rsa_private_decrypt(message + RSA_SIZE, public_key, private_key, decrypt_second_part);
 
         memcpy(encrypt_secret, decrypt_first_part, RSA_BLOCK_SIZE);
-        temp = &*encrypt_secret + RSA_BLOCK_SIZE;
-        memcpy(temp, decrypt_second_part, RSA_SIZE - RSA_BLOCK_SIZE);
+        memcpy(encrypt_secret + RSA_BLOCK_SIZE, decrypt_second_part, RSA_SIZE - RSA_BLOCK_SIZE);
 
 #ifdef DEVELOPMENT
         Serial.print("First Decrypt part is: ");
@@ -57,13 +64,16 @@ message_info message_decrypting( uint8_t mes_len, uint8_t *message)
         print_data(encrypt_secret, RSA_SIZE);
 #endif
         rsa_public_decrypt(encrypt_secret, public_key_client, decrypted_pieces.the_secret);
+
 #ifdef DEVELOPMENT
         Serial.print("The Hash of ID is: ");
         print_data(decrypted_pieces.the_secret, HASH_SIZE);
 #endif
+
     }
     if (mes_len == REQ_MES_SIZE)
     {
+
 #ifdef DEVELOPMENT
         Serial.println("I AM ON REQUEST PARSING: ");
         Serial.println("Will decrypt By AES:");
@@ -75,6 +85,7 @@ message_info message_decrypting( uint8_t mes_len, uint8_t *message)
         aes128_decrypt(request, decrypt_request);
         memcpy(decrypted_pieces.session_Id, decrypt_request, SESSION_ID_SIZE);
         memcpy(decrypted_pieces.request, &*decrypt_request + SESSION_ID_SIZE, AES_BLOCK_SIZE - SESSION_ID_SIZE);
+
 #ifdef DEVELOPMENT
         Serial.print("Session ID is: ");
         print_data(decrypted_pieces.session_Id, SESSION_ID_SIZE);
@@ -98,16 +109,17 @@ bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
     memcpy(res_hash, &*the_whole_message + (mes_len - HASH_SIZE), HASH_SIZE);
 
     sha1(the_mes, mes_len - HASH_SIZE, temp_hash);
+
 #ifdef DEVELOPMENT
     Serial.print("Received Hash is:   ");
     print_data(res_hash, HASH_SIZE);
     Serial.print("Calculated Hash is: ");
     print_data(temp_hash, HASH_SIZE);
 #endif
+
     if (!memcmp(temp_hash, res_hash, HASH_SIZE))
     {
         return true;
-        ;
     }
     else
     {
@@ -122,7 +134,7 @@ uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_
     Serial.println("\n//.......................I AM IN BUILD RESPONSE.......................//\n");
 #endif
     uint8_t hash[HASH_SIZE] = {};
-    uint8_t encryption_size, *encrypted_data, counter;
+    uint8_t encryption_size = 0U, *encrypted_data = NULL, counter;
 
     if (mes_len == AUTH_MES_SIZE)
     {
@@ -178,18 +190,19 @@ session_t session_creater()
     print_data(session.session_Id, SESSION_ID_SIZE);
     Serial.printf("\nEnd Session is %d Secunds \n", session.end_session / 1000);
 #endif
-    return temp;
+    return session;
 }
 // AES key generator
 void providing_aes_session(session_t session, uint8_t *buffer)
 {
     const uint8_t *key = aes128_init_key(NULL);
+
 #ifdef DEVELOPMENT
     Serial.print("AES Key: ");
     print_data(key, AES_KEY_SIZE);
 #endif
     memcpy_P(buffer, session.session_Id, SESSION_ID_SIZE);
-    memcpy_P(&*buffer + SESSION_ID_SIZE, key, AES_KEY_SIZE);
+    memcpy_P(buffer + SESSION_ID_SIZE, key, AES_KEY_SIZE);
 #ifdef DEVELOPMENT
     Serial.println("AES & SESSION ID is: ");
     print_data(buffer, SESSION_ID_SIZE + AES_KEY_SIZE);
@@ -260,7 +273,7 @@ uint8_t check_mes_len(uint8_t *mes)
     return mes_len;
 }
 
-// Joined the parts to make a Message before encryption which send to the client 
+// Joined the parts to make a Message before encryption which will be send to the client 
 void join_message(receiving_types type, uint8_t *message, uint8_t *buffer)
 {
     buffer[0] = type;
@@ -288,7 +301,7 @@ void renew_session(uint32_t session_end_time)
 // This function is handling the clients request 
 uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_types request, uint8_t * buffer)
 {    
-    uint8_t tx_counter = NULL;
+    uint8_t tx_counter = 0U;
     switch (request)
     {
     case (sending_types(LED_ON)):
