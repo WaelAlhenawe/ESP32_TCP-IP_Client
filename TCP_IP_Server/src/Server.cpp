@@ -11,7 +11,7 @@
 #include <Server.h>
 
 
-
+// To print data in Hex
 void print_data(const uint8_t *data, uint8_t size)
 {
     for (uint8_t i = 0; i < size; i++)
@@ -21,6 +21,7 @@ void print_data(const uint8_t *data, uint8_t size)
     Serial.println();
 }
 
+// Message decryption handling based on Authentication and Requesting info.
 message_info message_decrypting(message_info message_details, uint8_t mes_len, uint8_t *message)
 {
 
@@ -83,6 +84,7 @@ message_info message_decrypting(message_info message_details, uint8_t mes_len, u
     return decrypted_pieces;
 }
 
+//  checking Hash 
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
 {
 #ifdef DEVELOPMENT
@@ -113,6 +115,7 @@ bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
     }
 }
 
+//Function to build response message to the client
 uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_t *buffer)
 {
 #ifdef DEVELOPMENT
@@ -157,6 +160,7 @@ uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_
     return counter;
 }
 
+
 void Session_Id_generater(uint8_t key_holder[], uint8_t key_size)
 {
     for (uint8_t i = 0; i < key_size; i++)
@@ -165,6 +169,7 @@ void Session_Id_generater(uint8_t key_holder[], uint8_t key_size)
     }
 }
 
+// Session creator
 session_t session_creater()
 {
 #ifdef DEVELOPMENT
@@ -181,7 +186,7 @@ session_t session_creater()
 #endif
     return temp;
 }
-
+// AES key generator
 void providing_aes_session(session_t session, uint8_t *buffer)
 {
     const uint8_t *key = aes128_init_key(NULL);
@@ -197,6 +202,7 @@ void providing_aes_session(session_t session, uint8_t *buffer)
 #endif
 }
 
+// To check session period is still valid
 bool session_check(session_t ses)
 {
 #ifdef DEVELOPMENT
@@ -222,6 +228,7 @@ bool session_check(session_t ses)
     return flag;
 }
 
+// checking the received message length
 uint8_t check_mes_len(uint8_t *mes)
 {
 #ifdef DEVELOPMENT
@@ -259,6 +266,7 @@ uint8_t check_mes_len(uint8_t *mes)
     return mes_len;
 }
 
+// Joined the parts to make a Message before encryption which send to the client 
 void join_message(receiving_types type, uint8_t *message, uint8_t *buffer)
 {
     buffer[0] = type;
@@ -283,6 +291,7 @@ void renew_session(uint32_t session_end_time)
 #endif
 }
 
+// This function is handling the clients request 
 uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_types request, uint8_t * buffer)
 {    
     uint8_t tx_counter;

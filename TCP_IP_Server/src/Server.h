@@ -67,11 +67,32 @@ static uint8_t public_key_client[RSA_SIZE] = {
     0xDB, 0x44, 0xDD, 0xA4, 0xB7, 0xAB, 0x9D, 0x86, 0x2B, 0xBD, 0xC1, 0xFD, 0x67, 0xC9, 0x0B, 0xAF,
     0x05, 0x76, 0x3E, 0x4E, 0xD3, 0xD1, 0xDF, 0x9B, 0x7A, 0x75, 0x6E, 0x4C, 0x5F, 0x63, 0x63, 0x75};
 
-
+/**
+ * @brief Print data in hex
+ * 
+ * @param data data which is suppose to be print in Hex
+ * @param size  size of the data
+ */
 void print_data(const uint8_t *data, uint8_t size);
 
+/**
+ * @brief Print data in hex
+ * 
+ * @param message_details data which is suppose to be print in Hex
+ * @param mes_len  size of the data
+ * @param message
+ * @return 
+ */
 message_info message_decrypting(message_info message_details, uint8_t mes_len, uint8_t *message);
 
+/**
+ * @brief Print data in hex
+ * 
+ * @param message_details data which is suppose to be print in Hex
+ * @param mes_len  size of the data
+ * @param message
+ * @return 
+ */
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message);
 
 uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_t *buffer);
