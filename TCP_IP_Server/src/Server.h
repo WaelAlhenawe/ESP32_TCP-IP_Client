@@ -76,8 +76,6 @@ bool check_hash(uint8_t mes_len, uint8_t *the_whole_message);
 
 uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_t *buffer);
 
-void Session_Id_generater(uint8_t key_holder[], uint8_t key_size);
-
 session_t session_creater();
 
 void providing_aes_session(session_t session, uint8_t *buffer);

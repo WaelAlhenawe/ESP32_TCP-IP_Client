@@ -63,7 +63,7 @@ void loop()
         {
             if (check_hash(mes_len, rx_buffer))
             {
-                message_details = message_decrypting(message_details, mes_len, rx_buffer);
+                message_details = message_decrypting(mes_len, rx_buffer);
                 if (mes_len == AUTH_MES_SIZE)
                 {
                     if (!memcmp(message_details.the_secret, auth_hash_key, HASH_SIZE))
