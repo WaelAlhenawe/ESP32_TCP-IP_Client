@@ -70,7 +70,7 @@ static uint8_t public_key_client[RSA_SIZE] = {
 
 void print_data(const uint8_t *data, uint8_t size);
 
-message_info message_decrypting(message_info message_details, uint8_t mes_len, uint8_t *message);
+message_info message_decrypting(uint8_t mes_len, uint8_t *message);
 
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message);
 
