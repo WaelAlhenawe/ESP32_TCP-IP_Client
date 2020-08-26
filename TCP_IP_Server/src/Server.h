@@ -68,37 +68,53 @@ static uint8_t public_key_client[RSA_SIZE] = {
     0x05, 0x76, 0x3E, 0x4E, 0xD3, 0xD1, 0xDF, 0x9B, 0x7A, 0x75, 0x6E, 0x4C, 0x5F, 0x63, 0x63, 0x75};
 
 /**
- * @brief Print data in hex
- * 
+ * @brief Print data in hex 
  * @param data data which is suppose to be print in Hex
  * @param size  size of the data
  */
 void print_data(const uint8_t *data, uint8_t size);
 
 /**
- * @brief Print data in hex
- * 
- * @param message_details data which is suppose to be print in Hex
- * @param mes_len  size of the data
- * @param message
- * @return 
+ * @brief Message decryption based on RSA(authentication) and AES(requesting)
+ * @param mes_len  length of the received message from client
+ * @param message  message is the received buffer
+ * @return it will return a struct of type message_info. If the decryption is based on RSA it will fill 
+ * (the_secret)memeber of the struct, and it fill (session_id and request) members of the struct if its 
+ * the decryption is based on AES 
  */
 message_info message_decrypting(uint8_t mes_len, uint8_t *message);
 
 /**
- * @brief Print data in hex
- * 
- * @param message_details data which is suppose to be print in Hex
- * @param mes_len  size of the data
- * @param message
- * @return 
+ * @brief checking the received hash and hash which is calculated for encrypted data are same
+ * @param mes_len  length of the received message from client
+ * @param the_whole_message is the received buffer
+ * @return  boolen value 
  */
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message);
 
+
+/**
+ * @brief Build the response message to the client
+ * @param mes_len  length of the received message from client
+ * @param data which is supposed to be encrypted
+ * @param data_size size of the data
+ * @param buffer  in which encrypted data and hash value are stored.
+ * @return  uint8_t which is size of the encrypted data and hash size(the whole message)
+ */
 uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_t *buffer);
 
+/**
+ * @brief creating Session id and Session end time for the session and stored in a struct sesstion_t
+ * @return Struct session_t
+ */
 session_t session_creater();
 
+/**
+ * @brief Generating the AES key and copy it with the session id to the buffer
+ * @param session Struct session_t
+ * @param buffer  which is suppose to be store AES key and session id 
+ * 
+ */
 void providing_aes_session(session_t session, uint8_t *buffer);
 
 bool session_check(session_t ses);
