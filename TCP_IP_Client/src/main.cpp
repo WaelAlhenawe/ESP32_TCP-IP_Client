@@ -14,8 +14,9 @@
 // #define SSID "Telia-ED8AC9"
 // #define PASSWORD "05162D814F"
 
+#define SERVER "192.168.0.116"
+
 #define PORT (12345U)
-#define SERVER "192.168.0.144"
 
 #define HASH_SIZE (20U)
 #define BUFFER_SIZE (128U)
@@ -36,17 +37,20 @@ static uint8_t client_private_key[RSA_SIZE] = {
 static uint8_t public_key_server[RSA_SIZE] = {
     0xC3, 0xA5, 0x4E, 0x87, 0xAD, 0xC6, 0xA4, 0x02, 0x11, 0x0B, 0xF2, 0x75, 0xE3, 0xB6, 0x6D, 0xE6,
     0x55, 0xA0, 0x17, 0x60, 0x16, 0xC2, 0x12, 0x58, 0xA9, 0xC6, 0xF5, 0x91, 0xCD, 0xB7, 0xA7, 0xA9};
-//jljnjk
+
 static bool authorized = false;
 
-enum request_types
+enum sending_types
 {
   LED_ON = 1,
   LED_OFF,
-  TEMPERATURE
+  LED_STATUS,
+  TEMPERATURE,
+  END_SESSION,
+  ERROR
 };
 
-enum server_response
+enum receiving_types
 {
   REQUEST_DONE = 0,
   NOT_RESEIVED,
@@ -57,9 +61,8 @@ enum server_response
 struct response_info
 {
   uint8_t session_Id[SESSION_ID_SIZE] = {};
-  uint8_t aes_key[AES_KEY_SIZE] = {};
-  server_response type;
   uint8_t message[AES_BLOCK_SIZE - 1];
+  receiving_types type;
 };
 
 //static uint8_t client_public_key[RSA_SIZE] ={};
@@ -71,7 +74,7 @@ static response_info message_details = {};
 char menu_choice = ' ';
 uint8_t rx_buffer[BUFFER_SIZE] = {};
 uint8_t auth_key[RSA_BLOCK_SIZE] = "kp2-5v8/B?E(H+VmY3wA";
-const uint8_t *key = {};
+// const uint8_t *key = {};
 
 // To print data in hex
 static void print_data(const uint8_t *data, uint8_t size)
@@ -101,8 +104,9 @@ static char services_menu()
       Serial.println("(0) For Authentication.");
       Serial.println("(1) For Set Light ON.");
       Serial.println("(2) For Set Light OFF.");
-      Serial.println("(3) For Get Server Temperature.");
-      Serial.println("(4) For End Session.");
+      Serial.println("(3) For Get Light Status.");
+      Serial.println("(4) For Get Server Temperature.");
+      Serial.println("(5) For End Session.");
       Serial.print("Your Choice: ");
     }
 
@@ -114,7 +118,7 @@ static char services_menu()
 
         Serial.println(chr);
 
-        if (chr == '0' || chr == '1' || chr == '2' || chr == '3' || chr == '4')
+        if (chr == '0' || chr == '1' || chr == '2' || chr == '3' || chr == '4' || chr == '5')
         {
           get_it = true;
           ok = false;
@@ -145,16 +149,18 @@ static response_info message_parsing(response_info old_decrypted_details, uint8_
 
   if (mes_len == AES_MES_SIZE)
   {
+    uint8_t temp_aes_key[AES_KEY_SIZE]={};
     decrypting_size = RSA_BLOCK_SIZE;
     decrypted_data = (uint8_t *)malloc(decrypting_size);
     rsa_private_decrypt(message, client_public_key, client_private_key, decrypted_data);
     memcpy(decrypted_details.session_Id, decrypted_data, SESSION_ID_SIZE);
-    memcpy(decrypted_details.aes_key, &*decrypted_data + SESSION_ID_SIZE, AES_KEY_SIZE);
+    memcpy(temp_aes_key, &*decrypted_data + SESSION_ID_SIZE, AES_KEY_SIZE);
+    aes128_init_key(temp_aes_key);
 #ifdef DEVELOPMENT
     Serial.print("Session ID is: ");
     print_data(decrypted_details.session_Id, SESSION_ID_SIZE);
     Serial.print("AES key is: ");
-    print_data(decrypted_details.aes_key, AES_KEY_SIZE);
+    print_data(temp_aes_key, AES_KEY_SIZE);
 #endif
     free(decrypted_data);
   }
@@ -163,7 +169,7 @@ static response_info message_parsing(response_info old_decrypted_details, uint8_
     decrypting_size = AES_BLOCK_SIZE;
     decrypted_data = (uint8_t *)malloc(decrypting_size);
     aes128_decrypt(message, decrypted_data);
-    decrypted_details.type = (server_response)decrypted_data[0];
+    decrypted_details.type = (receiving_types)decrypted_data[0];
     memcpy(decrypted_details.message, &*decrypted_data + 1, AES_BLOCK_SIZE);
 
 #ifdef DEVELOPMENT
@@ -175,37 +181,37 @@ static response_info message_parsing(response_info old_decrypted_details, uint8_
   return decrypted_details;
 }
 
-static uint8_t *check_hash(uint8_t mes_len, uint8_t *the_whole_message)
+static bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
 {
+#ifdef DEVELOPMENT
+    Serial.println("\n//.........................I AM IN HASH CHECK.........................//\n");
+#endif
 
-  uint8_t *the_mes, *res_hash, *temp_hash;
-  the_mes = (uint8_t *)malloc(mes_len - HASH_SIZE);
-  res_hash = (uint8_t *)malloc(HASH_SIZE);
-  temp_hash = (uint8_t *)malloc(HASH_SIZE);
+    uint8_t the_mes[mes_len - HASH_SIZE], res_hash[HASH_SIZE], temp_hash[HASH_SIZE];
 
-  memcpy(the_mes, the_whole_message, mes_len - HASH_SIZE);
+    memcpy(the_mes, the_whole_message, mes_len - HASH_SIZE);
 
-  memcpy(res_hash, &*the_whole_message + (mes_len - HASH_SIZE), HASH_SIZE);
+    memcpy(res_hash, &*the_whole_message + (mes_len - HASH_SIZE), HASH_SIZE);
 
-  sha1(the_mes, mes_len - HASH_SIZE, temp_hash);
-
-  if (!memcmp(temp_hash, res_hash, HASH_SIZE))
-  {
-    Serial.println("HASH OK");
-    free(res_hash);
-    free(temp_hash);
-    return the_mes;
-  }
-  else
-  {
-    Serial.println("HASH NOT THE SAME");
-    free(temp_hash);
-    free(res_hash);
-    return 0;
-  }
+    sha1(the_mes, mes_len - HASH_SIZE, temp_hash);
+#ifdef DEVELOPMENT
+    Serial.print("Received Hash is:   ");
+    print_data(res_hash, HASH_SIZE);
+    Serial.print("Calculated Hash is: ");
+    print_data(temp_hash, HASH_SIZE);
+#endif
+    if (!memcmp(temp_hash, res_hash, HASH_SIZE))
+    {
+        return true;
+        ;
+    }
+    else
+    {
+        return false;
+    }
 }
 
-static void build_request(const uint8_t *session_id, request_types request, char *buffer)
+static void build_request(const uint8_t *session_id, sending_types request, char *buffer)
 {
   uint8_t hash[HASH_SIZE] = {};
   Serial.println("I AM ON BUILD : ");
@@ -233,21 +239,6 @@ static void build_request(const uint8_t *session_id, request_types request, char
   free(encrypted_mes);
 }
 
-/*Set your Static IP address
-
-IPAddress local_IP(172, 31, 31, 59);
-Set your Gateway IP address
-IPAddress gateway(172, 31, 1, 1);
-
-IPAddress subnet(255, 255, 0, 0);
-Set your Gateway IP address
-IPAddress gateway(172, 31, 31, 1);
-
-IPAddress subnet(255, 255, 0, 0);
-IPAddress primaryDNS(8, 8, 8, 8);   //optional
-IPAddress secondaryDNS(8, 8, 4, 4); //optional
-*/
-
 static void authorization()
 {
   uint8_t auth_hash[HASH_SIZE] = {};
@@ -270,7 +261,7 @@ static void authorization()
   {
     sign_second_part[i - RSA_BLOCK_SIZE] = sign_auth[i];
   }
-  //sign_second_part[RSA_SIZE-RSA_BLOCK_SIZE] = '\0';
+
   Serial.println("Second part is: ");
   print_data(sign_second_part, RSA_SIZE - RSA_BLOCK_SIZE);
   uint8_t en_sign_first_part[RSA_SIZE] = {};
@@ -336,29 +327,14 @@ static uint8_t check_mes_len(uint8_t *mes)
 
 void setup()
 {
-  /* Configures static IP address
-   if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
-     Serial.println("STA Failed to configure");
-   }*/
-
   Serial.begin(9600);
   while (!Serial)
   {
     delay(100);
   }
-
-  // WiFi.begin(SSID, PASSWORD);
-
-  // while (WiFi.status() != WL_CONNECTED)
-  // {
-  //   delay(500);
-  //   Serial.print(".");
-  // }
-
-
   while (WL_CONNECTED != WiFi.begin(SSID, PASSWORD))
   {
-    delay(1000);
+    delay(4000);
     Serial.print(".");
   }
 
@@ -393,7 +369,7 @@ void loop()
       }
     }
 
-    build_request(message_details.session_Id, (request_types)menu_choice, tx_buffer);
+    build_request(message_details.session_Id, (sending_types)menu_choice, tx_buffer);
     print_data(message_details.session_Id, SESSION_ID_SIZE);
     tx_counter = RES_MES_SIZE;
   }
@@ -403,49 +379,47 @@ void loop()
   if (client.connected())
   {
     client.write_P(tx_buffer, tx_counter);
-    delay(5000);
+    delay(2500);
 
     if (client.connected())
     {
-
       client.read((uint8_t *)rx_buffer, (size_t)sizeof(rx_buffer));
-#ifdef DEVELOPMENT
-      Serial.print("rx_buffer readed is: ");
-      print_data(rx_buffer, BUFFER_SIZE);
-#endif
       uint8_t mes_len;
       if ((mes_len = check_mes_len(rx_buffer)))
       {
+#ifdef DEVELOPMENT
+      Serial.print("rx_buffer readed is: ");
+      print_data(rx_buffer, mes_len);
+#endif
         if (check_hash(mes_len, rx_buffer))
         {
           message_details = message_parsing(message_details, mes_len, rx_buffer);
           if (mes_len == AES_MES_SIZE)
           {
-            key = aes128_init_key(message_details.aes_key);
             authorized = true;
           }
           if (mes_len == RES_MES_SIZE)
           {
             switch (message_details.type)
             {
-            case (server_response(NOT_RESEIVED)):
+            case (receiving_types(NOT_RESEIVED)):
               Serial.print("The encrypted res massage is: ");
               Serial.println((char *)message_details.message);
               break;
 
-            case (server_response(NOT_AUTH)):
+            case (receiving_types(NOT_AUTH)):
               Serial.print("Auth Error: ");
               Serial.println((char *)message_details.message);
               authorized = false;
               break;
 
-            case (server_response(SESSION_END)):
+            case (receiving_types(SESSION_END)):
               Serial.print("Seesion END: ");
               Serial.println((char *)message_details.message);
               authorized = false;
               break;
 
-            case (server_response(REQUEST_DONE)):
+            case (receiving_types(REQUEST_DONE)):
               Serial.print("The massage is: ");
               Serial.println((char *)message_details.message);
               break;
