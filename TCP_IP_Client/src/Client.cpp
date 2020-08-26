@@ -26,6 +26,7 @@ void print_data(const uint8_t *data, uint8_t size)
   Serial.println();
 }
 
+// Menu choice
 char services_menu()
 {
   bool menu_apper = true, ok = true, get_it = false;
@@ -75,6 +76,7 @@ char services_menu()
   return chr;
 }
 
+// Fuction handling the decryption based on AES/RSA
 response_info message_parsing(response_info old_decrypted_details, uint8_t mes_len, uint8_t *message)
 {
 #ifdef DEVELOPMENT
@@ -121,6 +123,7 @@ response_info message_parsing(response_info old_decrypted_details, uint8_t mes_l
   return decrypted_details;
 }
 
+// Hash checking
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
 {
 #ifdef DEVELOPMENT
@@ -151,6 +154,7 @@ bool check_hash(uint8_t mes_len, uint8_t *the_whole_message)
     }
 }
 
+// Building the request message to the server after authentication
 void build_request(const uint8_t *session_id, sending_types request, char *buffer)
 {
   uint8_t hash[HASH_SIZE] = {};
@@ -179,6 +183,7 @@ void build_request(const uint8_t *session_id, sending_types request, char *buffe
   free(encrypted_mes);
 }
 
+// Building the message for authentication
 void authorization(uint8_t * buffer)
 {
   uint8_t counter = 0U;  
@@ -231,6 +236,7 @@ void authorization(uint8_t * buffer)
   print_data(buffer, counter);
 }
 
+// Function to get the length of the received buffer
 uint8_t check_mes_len(uint8_t *mes)
 {
 #ifdef DEVELOPMENT
