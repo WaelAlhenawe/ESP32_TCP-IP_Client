@@ -47,21 +47,58 @@ struct response_info
   receiving_types type;
 };
 
+/**
+ * @brief This function is used to print data in hex
+ * @param data which is suppose to be print in Hex
+ * @param size  size of the data
+ */
 void print_data(const uint8_t *data, uint8_t size);
 
+/**
+ * @brief  This function is used to display the menu choice of the service
+ * @return char - The character which indicates the choice 
+ */
 char services_menu();
 
+/**
+ * @brief Received buffer is decrypted by AES/RSA based on the message length and stored the message details in the struct response_info
+ * @param old_decrypted_details - struct response_info 
+ * @param mes_len length of the received message from client
+ * @param message The received  buffer from server
+ * @return  response_info which holds the session id , server message and receiving types(enum)
+ */
 response_info message_parsing(response_info old_decrypted_details, uint8_t mes_len, uint8_t *message);
 
+/**
+ * @brief This function is used to check the received hash and hash calculated from encrypted data are same.
+ * @param mes_len length of the received buffer from client
+ * @param the_whole_message The received buffer
+ * @return boolean value
+ */
 bool check_hash(uint8_t mes_len, uint8_t *the_whole_message);
 
+/**
+ * @brief This function is used to build the request to server using session id and request
+ * @param session_id The id for the session
+ * @param request - sending_types(enum)
+ * @param buffer  which will hold the encrypted message and hash.
+ */
 void build_request(const uint8_t *session_id, sending_types request, char *buffer);
 
+/**
+ * @brief This function is used for authentication before any data send
+ * @param buffer which will hold the message (signed by client private key and encrypted by server public key) and hash of the message.
+ */
 void authorization(uint8_t * buffer);
 
+/**
+ * @brief This function is used to check the message length of the received buffer from server
+ * @param mes which is holding the received buffer.
+ * @return uint8_t length of the received buffer.
+ */
 uint8_t check_mes_len(uint8_t *mes);
 
 
 
 
-#endif /* SERVER_H */
+#endif /* CLIENT_H */
