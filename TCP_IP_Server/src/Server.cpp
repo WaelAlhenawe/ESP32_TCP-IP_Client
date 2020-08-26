@@ -21,14 +21,14 @@ void print_data(const uint8_t *data, uint8_t size)
     Serial.println();
 }
 
-// Message decryption handling based on Authentication and Requesting info.
-message_info message_decrypting(message_info message_details, uint8_t mes_len, uint8_t *message)
+
+message_info message_decrypting( uint8_t mes_len, uint8_t *message)
 {
 
 #ifdef DEVELOPMENT
     Serial.println("\n//.....................I AM IN MESSAGE DECRYPTING.....................//\n");
 #endif
-    message_info decrypted_pieces = message_details;
+    message_info decrypted_pieces;
     if (mes_len == AUTH_MES_SIZE)
     {
 #ifdef DEVELOPMENT
@@ -160,29 +160,23 @@ uint8_t build_response(uint8_t mes_len, uint8_t *data, uint8_t data_size, uint8_
     return counter;
 }
 
-
-void Session_Id_generater(uint8_t key_holder[], uint8_t key_size)
-{
-    for (uint8_t i = 0; i < key_size; i++)
-    {
-        key_holder[i] = random(0xFF);
-    }
-}
-
 // Session creator
 session_t session_creater()
 {
 #ifdef DEVELOPMENT
     Serial.println("\n//.......................I AM IN SESSION CREATE ......................//\n");
 #endif
-    session_t temp;
-    Session_Id_generater(temp.session_Id, SESSION_ID_SIZE);
-    temp.end_session = millis() + SESSION_PERIOD;
+    session_t session;
+     for (uint8_t i = 0; i < SESSION_ID_SIZE; i++)
+    {
+        session.session_Id[i] = random(0xFF);
+    }
+    session.end_session = millis() + SESSION_PERIOD;
 
 #ifdef DEVELOPMENT
     Serial.print("Sesion ID is: ");
-    print_data(temp.session_Id, SESSION_ID_SIZE);
-    Serial.printf("\nEnd Session is %d Secunds \n", temp.end_session / 1000);
+    print_data(session.session_Id, SESSION_ID_SIZE);
+    Serial.printf("\nEnd Session is %d Secunds \n", session.end_session / 1000);
 #endif
     return temp;
 }
@@ -211,7 +205,7 @@ bool session_check(session_t ses)
     Serial.printf("Session End at: %d\n", ses.end_session / 1000);
 #endif
     bool flag;
-    if (ses.end_session - millis() <= SESSION_PERIOD)
+    if (millis() <= ses.end_session )
     {
         flag = true;
 #ifdef DEVELOPMENT
@@ -294,7 +288,7 @@ void renew_session(uint32_t session_end_time)
 // This function is handling the clients request 
 uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_types request, uint8_t * buffer)
 {    
-    uint8_t tx_counter;
+    uint8_t tx_counter = NULL;
     switch (request)
     {
     case (sending_types(LED_ON)):
