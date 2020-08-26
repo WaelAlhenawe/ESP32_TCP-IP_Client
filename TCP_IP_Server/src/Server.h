@@ -98,19 +98,46 @@ session_t session_creater();
 /**
  * @brief Generating the AES key and copy it with the session id to the buffer
  * @param session Struct session_t
- * @param buffer  which is suppose to be store AES key and session id 
- * 
+ * @param buffer  which is suppose to be store AES key and session id  
  */
 void providing_aes_session(session_t session, uint8_t *buffer);
 
+/**
+ * @brief checking whether the session exceeds one minute or not.
+ * @param ses as struct holding current session id and end session time
+ * @return boolean value 
+ */
 bool session_check(session_t ses);
 
+/**
+ * @brief This function is used to check the message length of the received buffer from client
+ * @param mes which is holding the received buffer.
+ * @return uint8_t length of the received buffer.
+ */
 uint8_t check_mes_len(uint8_t *mes);
 
+/**
+ * @brief This function is used to Joined the parts to make a Message before encryption.
+ * @param type as a enum receiving_types  which is supposed to be send to client as a response
+ * @param message which holding original message 
+ * @param buffer which holding both receiving_types and original message.
+ */
 void join_message(receiving_types type, uint8_t *message, uint8_t *buffer);
 
+/**
+ * @brief This function is used to renew the current session time if session time does not exceeds one minute.
+ * @param session_end_time is end_session (struct session_t )
+ */
 void renew_session(uint32_t session_end_time);
 
+/**
+ * @brief This function is used to handle the client request and return tx counter of the sending buffer.
+ * @param session_end_time is end session time
+ * @param mes_len   length of the received message(buffer) from client
+ * @param request (enum sending_types) 
+ * @param buffer which will holds the  encrypted data and hash value.
+ * @return uint8_t tx_counter of the buffer
+ */
 uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_types request, uint8_t * buffer);
 
 #endif /* SERVER_H */
