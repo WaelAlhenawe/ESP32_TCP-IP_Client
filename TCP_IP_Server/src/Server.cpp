@@ -306,13 +306,13 @@ uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_ty
     {
     case (sending_types(LED_ON)):
         digitalWrite(BUILTIN_LED, HIGH);
-        join_message(receiving_types(OK), (uint8_t *)"Light ON", buffer);
+        join_message(receiving_types(REQUEST_DONE), (uint8_t *)"Light ON", buffer);
         tx_counter = build_response(mes_len, buffer, sizeof("Light ON") + 1, buffer);
         break;
 
     case (sending_types(LED_OFF)):
         digitalWrite(BUILTIN_LED, LOW);
-        join_message(receiving_types(OK), (uint8_t *)"Light OFF", buffer);
+        join_message(receiving_types(REQUEST_DONE), (uint8_t *)"Light OFF", buffer);
         tx_counter = build_response(mes_len, buffer, sizeof("Light OFF") + 1, buffer);
         break;
 
@@ -321,7 +321,7 @@ uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_ty
         char temp[6];
         float x = temperatureRead();
         dtostrf(x, 5, 2, temp);
-        join_message(receiving_types(OK), (uint8_t *)temp, buffer);
+        join_message(receiving_types(REQUEST_DONE), (uint8_t *)temp, buffer);
         tx_counter = build_response(mes_len, buffer, sizeof(temp) + 1, buffer);
     }
     break;
@@ -329,23 +329,25 @@ uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_ty
     case (sending_types(END_SESSION)):
         *session_end_time = millis();
         Serial.printf ("\n The session After Ended is: %d\n", (uint32_t)*session_end_time /1000);
-        join_message(receiving_types(OK), (uint8_t *)"Session Ended", buffer);
+        join_message(receiving_types(REQUEST_DONE), (uint8_t *)"Session Ended", buffer);
         tx_counter = build_response(mes_len, buffer, sizeof("Session Ended") + 1, buffer);
         break;
 
     case (sending_types(LED_STATUS)):
         if(!digitalRead(BUILTIN_LED)){
-             join_message(receiving_types(OK), (uint8_t *)"Light OFF", buffer);
+             join_message(receiving_types(REQUEST_DONE), (uint8_t *)"Light OFF", buffer);
             tx_counter = build_response(mes_len, buffer, sizeof("Light OFF") + 1, buffer);
         }
         if(digitalRead(BUILTIN_LED)){
-            join_message(receiving_types(OK), (uint8_t *)"Light ON", buffer);
+            join_message(receiving_types(REQUEST_DONE), (uint8_t *)"Light ON", buffer);
             tx_counter = build_response(mes_len, buffer, sizeof("Light ON") + 1, buffer);
         }
         break;
 
-    case (sending_types(ERROR)):
+    default:
     {
+        join_message(receiving_types(ERROR), (uint8_t *)"ReAuthenticate", buffer);
+        tx_counter = build_response(mes_len, buffer, sizeof("ReAuthenticate") + 1, buffer);
         break;
     }
     }

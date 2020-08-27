@@ -27,17 +27,15 @@ enum sending_types
     LED_OFF,
     LED_STATUS,
     TEMPERATURE,
-    END_SESSION,
-    ERROR
+    END_SESSION
 };
 
 enum receiving_types
 {
-    REQUEST_DONE = 0,
-    NOT_RESEIVED,
-    NOT_AUTH,
-    SESSION_END,
+  REQUEST_DONE = 0,
+  ERROR
 };
+
 
 typedef struct
 {
@@ -135,7 +133,7 @@ void renew_session(uint32_t session_end_time);
  * @param session_end_time is end session time
  * @param mes_len   length of the received message(buffer) from client
  * @param request (enum sending_types) 
- * @param buffer which will holds the  encrypted data and hash value.
+ * @param buffer which will holds the encrypted data and hash value.
  * @return uint8_t tx_counter of the buffer
  */
 uint8_t handler_request(uint32_t * session_end_time, uint8_t mes_len, sending_types request, uint8_t * buffer);

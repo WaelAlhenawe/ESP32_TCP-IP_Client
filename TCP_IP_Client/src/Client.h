@@ -10,7 +10,7 @@
 #include <SHA1.h>
 #include <AES128.h>
 
-#define SERVER "192.168.1.69"
+#define SERVER "192.168.1.174"
 
 #define PORT (12345U)
 
@@ -29,23 +29,20 @@ enum sending_types
   LED_STATUS,
   TEMPERATURE,
   END_SESSION,
-  ERROR
 };
 
 enum receiving_types
 {
   REQUEST_DONE = 0,
-  NOT_RESEIVED,
-  NOT_AUTH,
-  SESSION_END,
+  ERROR
 };
 
-struct response_info
+typedef struct 
 {
   uint8_t session_Id[SESSION_ID_SIZE] = {};
   uint8_t message[AES_BLOCK_SIZE - 1];
   receiving_types type;
-};
+}response_info;
 
 /**
  * @brief This function is used to print data in hex
@@ -56,12 +53,14 @@ void print_data(const uint8_t *data, uint8_t size);
 
 /**
  * @brief  This function is used to display the menu choice of the service
+ * @param authorized - it's boolean which is the authorization status 
  * @return char - The character which indicates the choice 
  */
-char services_menu();
+char services_menu(bool authorized);
 
 /**
- * @brief Received buffer is decrypted by AES/RSA based on the message length and stored the message details in the struct response_info
+ * @brief Received buffer is decrypted by AES/RSA based on the message length
+ *  and stored the message details in the struct response_info
  * @param old_decrypted_details - struct response_info 
  * @param mes_len length of the received message from client
  * @param message The received  buffer from server
@@ -87,7 +86,8 @@ void build_request(const uint8_t *session_id, sending_types request, char *buffe
 
 /**
  * @brief This function is used for authentication before any data send
- * @param buffer which will hold the message (signed by client private key and encrypted by server public key) and hash of the message.
+ * @param buffer which will hold the message (signed by client private key and encrypted by server public key)
+ * and hash of the message.
  */
 void authorization(uint8_t * buffer);
 
@@ -97,8 +97,5 @@ void authorization(uint8_t * buffer);
  * @return uint8_t length of the received buffer.
  */
 uint8_t check_mes_len(uint8_t *mes);
-
-
-
 
 #endif /* CLIENT_H */
